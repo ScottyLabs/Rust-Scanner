@@ -1,0 +1,1 @@
+{"repo": "cmumaps-rust", "total_files": 42, "rust_files": 6, "rust_file_ratio": 0.14285714285714285, "total_sloc": 1894, "rust_sloc": 318, "rust_sloc_ratio": 0.1678986272439282, "languages": ["", ".idx", ".lock", "Rust", ".yaml", ".pack", ".sample", ".toml", ".md"], "unique_crates": []}
