@@ -105,8 +105,8 @@ def main():
         try:
             stats = analyze_repo(repo.clone_url.replace("https://", f"https://{GITHUB_TOKEN}@"))
             results.append(stats)
-            with open("" + stats['repo'] + ".json", 'w') as f:
-                json.dump(data, f)
+            with open("/repositories/" + stats['repo'] + ".json", 'x') as f:
+                json.dump(stats, f)
         except Exception as e:
             print(f"Failed on {repo.full_name}: {e}")
 
