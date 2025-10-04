@@ -1,1 +1,1 @@
-{"Repository Name": "print", "Number of Files": 33, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 1372, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".lock", ".idx", ".html", ".md", ".css", ".pack"], "'Unique' Crates": []}
+{"Repository Name": "print", "Number of Files": 33, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 1372, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".pack", ".md", ".idx", ".css", ".lock", ".html", ".sample"], "'Unique' Crates": []}
