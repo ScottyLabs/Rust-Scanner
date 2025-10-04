@@ -99,9 +99,11 @@ def analyze_repo(repo_url):
     finally:
         shutil.rmtree(tmpdir)
 
-def main():
+def main(verbose = False):
     results = []
     for repo in org.get_repos():
+        if (verbose):
+            print(repo.name)
         try:
             stats = analyze_repo(repo.clone_url.replace("https://", f"https://{GITHUB_TOKEN}@"))
             results.append(stats)
