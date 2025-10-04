@@ -1,1 +1,1 @@
-{"repo": "dalmatian", "total_files": 45, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 1655, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", "TypeScript", ".yaml", ".pack", ".sample", ".md", ".json", ".example"], "unique_crates": []}
+{"Repository Name": "dalmatian", "Number of Files": 45, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 1655, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".yaml", ".json", ".idx", ".example", ".md", "TypeScript", ".pack"], "'Unique' Crates": []}

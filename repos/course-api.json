@@ -1,1 +1,1 @@
-{"repo": "course-api", "total_files": 39, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 1919, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", ".in", "Python", ".pack", ".sample", ".md"], "unique_crates": []}
+{"Repository Name": "course-api", "Number of Files": 39, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 1921, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".in", ".idx", "Python", ".md", ".pack"], "'Unique' Crates": []}

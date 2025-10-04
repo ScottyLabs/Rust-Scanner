@@ -1,1 +1,1 @@
-{"repo": "TH-Bot", "total_files": 32, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 751, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", "Python", ".pack", ".sample", ".md"], "unique_crates": []}
+{"Repository Name": "TH-Bot", "Number of Files": 32, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 750, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".idx", "Python", ".md", ".pack"], "'Unique' Crates": []}

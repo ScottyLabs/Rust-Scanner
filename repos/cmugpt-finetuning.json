@@ -1,1 +1,1 @@
-{"repo": "cmugpt-finetuning", "total_files": 17, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 704, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".sample"], "unique_crates": []}
+{"Repository Name": "cmugpt-finetuning", "Number of Files": 17, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 704, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample"], "'Unique' Crates": []}

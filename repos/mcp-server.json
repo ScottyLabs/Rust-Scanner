@@ -1,1 +1,1 @@
-{"repo": "mcp-server", "total_files": 40, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 2990, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", ".lock", "Python", ".pack", ".sample", ".toml", ".md"], "unique_crates": []}
+{"Repository Name": "mcp-server", "Number of Files": 42, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 5779, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".toml", ".sample", ".lock", ".idx", "Python", ".md", ".pack"], "'Unique' Crates": []}

@@ -1,1 +1,1 @@
-{"repo": "blog", "total_files": 35, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 1316, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", ".svg", ".yml", ".sample", ".pack", "JavaScript", ".md"], "unique_crates": []}
+{"Repository Name": "blog", "Number of Files": 35, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 1316, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".svg", ".sample", ".idx", "JavaScript", ".md", ".yml", ".pack"], "'Unique' Crates": []}
