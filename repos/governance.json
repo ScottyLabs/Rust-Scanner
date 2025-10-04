@@ -1,0 +1,1 @@
+{"repo": "governance", "total_files": 65, "rust_files": 8, "rust_file_ratio": 0.12307692307692308, "total_sloc": 4464, "rust_sloc": 808, "rust_sloc_ratio": 0.18100358422939067, "languages": ["", ".sh", ".html", ".idx", ".lock", "Rust", ".pack", ".sample", ".yml", ".toml", ".md", ".json", ".example"], "unique_crates": []}

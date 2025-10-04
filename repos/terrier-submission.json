@@ -1,0 +1,1 @@
+{"repo": "terrier-submission", "total_files": 42, "rust_files": 10, "rust_file_ratio": 0.23809523809523808, "total_sloc": 1715, "rust_sloc": 812, "rust_sloc_ratio": 0.47346938775510206, "languages": ["", ".idx", "Rust", ".pack", ".sample", ".yml", ".toml", ".json", ".md"], "unique_crates": ["chrono", "git2", "serde_json", "uuid", "zip"]}

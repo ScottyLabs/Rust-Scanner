@@ -1,0 +1,1 @@
+{"repo": "print-ios", "total_files": 124, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 54635, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", "Swift", ".lock", ".xcscheme", ".pack", ".sample", ".pbxproj", ".pdf", ".plist", ".storyboard", ".entitlements", ".json", ".xcworkspacedata", ".md", ".png"], "unique_crates": []}

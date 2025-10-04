@@ -1,0 +1,1 @@
+{"repo": "courses-data", "total_files": 36, "rust_files": 2, "rust_file_ratio": 0.05555555555555555, "total_sloc": 1480, "rust_sloc": 143, "rust_sloc_ratio": 0.09662162162162162, "languages": ["", ".html", ".idx", ".lock", "Rust", ".pack", ".sample", ".toml", ".md"], "unique_crates": ["bincode", "bm25", "json", "wasm-bindgen", "wasm-bindgen-futures"]}
