@@ -208,6 +208,109 @@ def count_rust_sloc(repo_path):
 
     return totalR, total
 
+def search_cargo_files(repo_name):
+    """Search for all Cargo.toml files in a repository using tree API"""
+    try:
+        # Get the default branch
+        url = f"https://api.github.com/repos/{GITHUB_ORG}/{repo_name}"
+        response = requests.get(url, headers=get_github_headers())
+
+        if response.status_code == 403:
+            print(f"\n⚠️  Rate limit hit! Waiting 60 seconds...")
+            time.sleep(60)
+            response = requests.get(url, headers=get_github_headers())
+
+        if response.status_code != 200:
+            print(f"[Error {response.status_code}]", end=" ")
+            return []
+
+        default_branch = response.json().get('default_branch', 'main')
+
+        # Get the tree recursively
+        tree_url = f"https://api.github.com/repos/{GITHUB_ORG}/{repo_name}/git/trees/{default_branch}?recursive=1"
+        tree_response = requests.get(tree_url, headers=get_github_headers())
+
+        if tree_response.status_code == 403:
+            print(f"\n⚠️  Rate limit hit! Waiting 60 seconds...")
+            time.sleep(60)
+            tree_response = requests.get(tree_url, headers=get_github_headers())
+
+        if tree_response.status_code != 200:
+            print(f"[Error {tree_response.status_code}]", end=" ")
+            return []
+
+        tree_data = tree_response.json()
+        cargo_files = []
+
+        # Find all Cargo.toml files
+        for item in tree_data.get('tree', []):
+            if item['path'].endswith('Cargo.toml'):
+                cargo_files.append(item['path'])
+
+        return cargo_files
+    except Exception as e:
+        print(f"[Exception: {e}]", end=" ")
+        return []
+
+def get_file_content(repo_name, file_path):
+    """Fetch any file content from a GitHub repo"""
+    url = f"https://api.github.com/repos/{GITHUB_ORG}/{repo_name}/contents/{file_path}"
+    response = requests.get(url, headers=get_github_headers())
+
+    if response.status_code == 200:
+        import base64
+        content = base64.b64decode(response.json()['content']).decode('utf-8')
+        return content
+    return None
+
+def parse_cargo_dependencies(cargo_content):
+    """Parse dependencies from Cargo.toml content"""
+    if not cargo_content:
+        return []
+
+    dependencies = []
+    in_dependencies = False
+
+    for line in cargo_content.split('\n'):
+        line = line.strip()
+
+        if line.startswith('[dependencies]'):
+            in_dependencies = True
+            continue
+        elif line.startswith('[') and in_dependencies:
+            break
+        elif in_dependencies and '=' in line:
+            dep_name = line.split('=')[0].strip()
+            if dep_name and not dep_name.startswith('#'):
+                dependencies.append(dep_name)
+
+    return dependencies
+
+# ---------------------------
+# Get all repos from GitHub
+# ---------------------------
+def get_all_repos():
+    """Fetch all repositories from the organization"""
+    repos = []
+    page = 1
+    while True:
+        url = f"https://api.github.com/orgs/{GITHUB_ORG}/repos?per_page=100&page={page}"
+        response = requests.get(url, headers=get_github_headers())
+
+        if response.status_code != 200:
+            print(f"Error fetching repos: {response.status_code}")
+            break
+
+        data = response.json()
+        if not data:
+            break
+
+        repos.extend([repo['name'] for repo in data])
+        page += 1
+
+    return repos
+
+
 def analyze_repo(repo_url):
     tmpdir = tempfile.mkdtemp()
     repo_path = os.path.join(tmpdir, "repo")
