@@ -1,1 +1,1 @@
-{"repo": "cmu-purity-test", "total_files": 42, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 1500, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", ".lock", ".pack", ".css", ".sample", ".json", ".tsx", ".md"], "unique_crates": []}
+{"Repository Name": "cmu-purity-test", "Number of Files": 42, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 1501, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".lock", ".json", ".idx", ".md", ".tsx", ".css", ".pack"], "'Unique' Crates": []}

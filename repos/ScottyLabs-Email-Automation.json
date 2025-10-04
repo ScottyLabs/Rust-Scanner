@@ -1,1 +1,1 @@
-{"repo": "ScottyLabs-Email-Automation", "total_files": 40, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 6466, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".jpg", ".html", ".idx", "Python", ".pack", ".sample", ".md"], "unique_crates": []}
+{"Repository Name": "ScottyLabs-Email-Automation", "Number of Files": 40, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 6466, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".idx", "Python", ".html", ".jpg", ".md", ".pack"], "'Unique' Crates": []}

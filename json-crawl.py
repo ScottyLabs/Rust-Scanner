@@ -8,6 +8,7 @@ import requests
 import tomllib  # Python 3.11+ (for parsing Cargo.toml)
 from github import Github  # pip install PyGithub
 import json
+import pandas as pd
 
 # ---------------------------
 # Config
@@ -86,29 +87,46 @@ def analyze_repo(repo_url):
                     rust_sloc += sloc
 
         return {
-            "repo": Path(repo_url).stem,
-            "total_files": total_files,
-            "rust_files": rust_files,
-            "rust_file_ratio": rust_files / total_files if total_files else 0,
-            "total_sloc": total_sloc,
-            "rust_sloc": rust_sloc,
-            "rust_sloc_ratio": rust_sloc / total_sloc if total_sloc else 0,
-            "languages": get_languages(repo_path),
-            "unique_crates": parse_cargo(repo_path),
+            "Repository Name": Path(repo_url).stem,
+            "Number of Files": total_files,
+            "Number of Rust Files": rust_files,
+            "Rust Files to Total Files": rust_files / total_files if total_files else 0,
+            "Total SLOC": total_sloc,
+            "Rust SLOC": rust_sloc,
+            "Rust SLOC to Total SLOC": rust_sloc / total_sloc if total_sloc else 0,
+            "Languages Used": get_languages(repo_path),
+            "'Unique' Crates": parse_cargo(repo_path),
         }
     finally:
         shutil.rmtree(tmpdir)
 
-def main():
-    results = []
+def main(verbose = False):
+    results = {
+            "Repository Name": [],
+            "Number of Files": [],
+            "Number of Rust Files": [],
+            "Rust Files to Total Files": [],
+            "Total SLOC": [],
+            "Rust SLOC": [],
+            "Rust SLOC to Total SLOC": [],
+            "Languages Used": [],
+            "'Unique' Crates": [],
+    }
     for repo in org.get_repos():
+        if (verbose):
+            print(repo.name)
         try:
             stats = analyze_repo(repo.clone_url.replace("https://", f"https://{GITHUB_TOKEN}@"))
-            results.append(stats)
-            with open("repos/" + stats['repo'] + ".json", 'a') as f:
+            for key,value in stats.items():
+                results[key].append(value)
+            with open("repos/" + stats['Repository Name'] + ".json", 'a') as f:
+                f.seek(0) # Move the file pointer to the beginning
+                f.truncate(0) # Truncate the file to zero length
                 json.dump(stats, f)
         except Exception as e:
             print(f"Failed on {repo.full_name}: {e}")
+    df = pd.DataFrame(results)
+    df.to_csv('results.csv', index=False)
 
 if __name__ == "__main__":
     main()

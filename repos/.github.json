@@ -1,1 +1,1 @@
-{"repo": ".github", "total_files": 28, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 725, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", ".pack", ".sample", ".md"], "unique_crates": []}
+{"Repository Name": ".github", "Number of Files": 28, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 726, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".idx", ".md", ".pack"], "'Unique' Crates": []}

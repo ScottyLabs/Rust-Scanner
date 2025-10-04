@@ -1,1 +1,1 @@
-{"repo": "passlink-server", "total_files": 35, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 1223, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", "TypeScript", ".pack", ".sample", "JavaScript", ".json"], "unique_crates": []}
+{"Repository Name": "passlink-server", "Number of Files": 35, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 1222, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".json", ".idx", "JavaScript", "TypeScript", ".pack"], "'Unique' Crates": []}

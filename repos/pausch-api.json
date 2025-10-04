@@ -1,1 +1,1 @@
-{"repo": "pausch-api", "total_files": 31, "rust_files": 0, "rust_file_ratio": 0.0, "total_sloc": 846, "rust_sloc": 0, "rust_sloc_ratio": 0.0, "languages": ["", ".idx", "Python", ".pack", ".sample", ".md"], "unique_crates": []}
+{"Repository Name": "pausch-api", "Number of Files": 31, "Number of Rust Files": 0, "Rust Files to Total Files": 0.0, "Total SLOC": 846, "Rust SLOC": 0, "Rust SLOC to Total SLOC": 0.0, "Languages Used": ["", ".sample", ".idx", "Python", ".md", ".pack"], "'Unique' Crates": []}
