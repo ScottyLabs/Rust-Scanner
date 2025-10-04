@@ -1,0 +1,38 @@
+{
+    "name": "scottylabs-template",
+    "module": "index.ts",
+    "type": "module",
+    "private": true,
+    "devDependencies": {
+        "@biomejs/biome": "2.2.4",
+        "@types/bun": "latest",
+        "oxlint": "^1.18.0",
+        "oxlint-tsgolint": "^0.2.0"
+    },
+    "license": "(MIT OR Apache-2.0)",
+    "scripts": {
+        "lint": "oxlint --type-aware",
+        "format": "biome format --write"
+    },
+    "commitlint": {
+        "extends": [
+            "@commitlint/config-conventional"
+        ]
+    },
+    "lint-staged": {
+        "**/*.{js,ts,svelte}": [
+            "bun lint",
+            "bun format"
+        ]
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^19.8.1",
+        "@commitlint/config-conventional": "^19.8.1",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.1.6"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    },
+    "packageManager": "bun@1.2.22"
+}
