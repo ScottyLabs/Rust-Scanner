@@ -9,48 +9,49 @@ struct RepoInfo {
     default_branch: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct TokeiLanguage {
     blanks: u64,
     code: u64,
     comments: u64,
+    #[serde(default)]
     lines: u64,
     #[serde(default)]
-    files: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct TokeiStats {
-    #[serde(rename = "Total")]
-    total: TokeiLanguage,
-    #[serde(flatten)]
-    languages: std::collections::HashMap<String, TokeiLanguage>,
+    inaccurate: bool,
 }
 
 struct RepoAnalyzer {
     github_token: String,
     temp_dir: PathBuf,
+    client: reqwest::blocking::Client,
 }
 
 impl RepoAnalyzer {
-    fn new(github_token: String) -> Self {
+    fn new(github_token: String) -> Result<Self, Box<dyn std::error::Error>> {
         let temp_dir = PathBuf::from("temp");
-        fs::create_dir_all(&temp_dir).expect("Failed to create temp directory");
+        fs::create_dir_all(&temp_dir)?;
 
-        Self {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("rust-tokei-counter/1.0")
+            .timeout(std::time::Duration::from_secs(300))
+            .build()?;
+
+        Ok(Self {
             github_token,
             temp_dir,
-        }
+            client,
+        })
     }
 
     fn get_default_branch(&self, repo: &str) -> Result<String, Box<dyn std::error::Error>> {
         let url = format!("https://api.github.com/repos/{}", repo);
 
-        let client = reqwest::blocking::Client::new();
-        let response = client
+        println!("🔍 Fetching repo info...");
+
+        let response = self.client
             .get(&url)
-            .header("Authorization", format!("token {}", self.github_token))
-            .header("User-Agent", "rust-tokei-counter")
+            .header("Authorization", format!("Bearer {}", self.github_token))
+            .header("Accept", "application/vnd.github.v3+json")
             .send()?;
 
         if !response.status().is_success() {
@@ -63,18 +64,17 @@ impl RepoAnalyzer {
 
     fn download_repo(&self, repo: &str, branch: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
         let url = format!("https://api.github.com/repos/{}/tarball/{}", repo, branch);
-        let repo_path = self.temp_dir.join(repo.replace("/", "_"));
-        let tarball_path = self.temp_dir.join(format!("{}.tar.gz", repo.replace("/", "_")));
+        let repo_path = self.temp_dir.join(repo.replace('/', "_"));
+        let tarball_path = self.temp_dir.join(format!("{}.tar.gz", repo.replace('/', "_")));
 
         fs::create_dir_all(&repo_path)?;
 
-        println!("⬇️  Downloading {}...", repo);
+        println!("⬇️  Downloading repository...");
 
-        let client = reqwest::blocking::Client::new();
-        let response = client
+        let response = self.client
             .get(&url)
-            .header("Authorization", format!("token {}", self.github_token))
-            .header("User-Agent", "rust-tokei-counter")
+            .header("Authorization", format!("Bearer {}", self.github_token))
+            .header("Accept", "application/vnd.github.v3+json")
             .send()?;
 
         if !response.status().is_success() {
@@ -82,11 +82,11 @@ impl RepoAnalyzer {
         }
 
         let bytes = response.bytes()?;
+        println!("   Downloaded {} MB", bytes.len() / 1_000_000);
         fs::write(&tarball_path, bytes)?;
 
         println!("📂 Extracting files...");
 
-        // Extract tarball
         let status = Command::new("tar")
             .args(&[
                 "-xzf",
@@ -101,13 +101,12 @@ impl RepoAnalyzer {
             return Err("Failed to extract tarball".into());
         }
 
-        // Cleanup tarball
         fs::remove_file(tarball_path)?;
 
         Ok(repo_path)
     }
 
-    fn run_tokei(&self, path: &PathBuf) -> Result<TokeiStats, Box<dyn std::error::Error>> {
+    fn get_tokei_stats(&self, path: &PathBuf) -> Result<(u64, u64, u64, u64), Box<dyn std::error::Error>> {
         println!("🔢 Counting lines...");
 
         let output = Command::new("tokei")
@@ -121,9 +120,27 @@ impl RepoAnalyzer {
         }
 
         let json_str = String::from_utf8(output.stdout)?;
-        let stats: TokeiStats = serde_json::from_str(&json_str)?;
+        let json: Value = serde_json::from_str(&json_str)?;
 
-        Ok(stats)
+        // Extract Total stats
+        let total = json.get("Total")
+            .ok_or("No Total field in tokei output")?;
+
+        let code = total.get("code")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        let comments = total.get("comments")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        let blanks = total.get("blanks")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        let lines = code + comments + blanks;
+
+        Ok((code, comments, blanks, lines))
     }
 
     fn print_tokei_output(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
@@ -139,7 +156,7 @@ impl RepoAnalyzer {
         Ok(())
     }
 
-    fn analyze_repo(&self, repo: &str) -> Result<TokeiStats, Box<dyn std::error::Error>> {
+    fn analyze_repo(&self, repo: &str) -> Result<(u64, u64, u64, u64), Box<dyn std::error::Error>> {
         println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("📦 Repository: {}", repo);
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -154,18 +171,18 @@ impl RepoAnalyzer {
         self.print_tokei_output(&repo_path)?;
 
         // Get JSON stats
-        let stats = self.run_tokei(&repo_path)?;
+        let (code, comments, blanks, lines) = self.get_tokei_stats(&repo_path)?;
 
         println!("\n📊 Summary:");
-        println!("   Code lines: {}", stats.total.code);
-        println!("   Comments: {}", stats.total.comments);
-        println!("   Blanks: {}", stats.total.blanks);
-        println!("   Total lines: {}", stats.total.lines);
+        println!("   Code lines: {}", code);
+        println!("   Comments: {}", comments);
+        println!("   Blanks: {}", blanks);
+        println!("   Total lines: {}", lines);
 
         // Cleanup
         fs::remove_dir_all(repo_path)?;
 
-        Ok(stats)
+        Ok((code, comments, blanks, lines))
     }
 
     fn cleanup(&self) {
@@ -180,10 +197,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Define repositories to analyze
     let repositories = vec![
-        "rust-lang/rust",
+        "tokio-rs/tokio",
+        "actix/actix-web",
+        "serde-rs/serde",
     ];
 
-    let analyzer = RepoAnalyzer::new(github_token);
+    let analyzer = RepoAnalyzer::new(github_token)?;
 
     println!("======================================");
     println!("LINE COUNT REPORT");
@@ -191,14 +210,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("======================================");
 
     let mut total_code = 0u64;
+    let mut total_comments = 0u64;
+    let mut total_blanks = 0u64;
     let mut total_lines = 0u64;
     let mut successful_repos = 0;
 
     for repo in &repositories {
         match analyzer.analyze_repo(repo) {
-            Ok(stats) => {
-                total_code += stats.total.code;
-                total_lines += stats.total.lines;
+            Ok((code, comments, blanks, lines)) => {
+                total_code += code;
+                total_comments += comments;
+                total_blanks += blanks;
+                total_lines += lines;
                 successful_repos += 1;
             }
             Err(e) => {
@@ -212,6 +235,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Repositories analyzed: {}", successful_repos);
     println!("Total lines of code: {}", total_code);
+    println!("Total comments: {}", total_comments);
+    println!("Total blank lines: {}", total_blanks);
     println!("Total lines: {}", total_lines);
     println!("======================================");
 
