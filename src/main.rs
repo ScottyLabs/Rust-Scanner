@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -9,44 +10,122 @@ struct RepoInfo {
     default_branch: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct TokeiLanguage {
-    blanks: u64,
-    code: u64,
-    comments: u64,
-    #[serde(default)]
-    lines: u64,
-    #[serde(default)]
-    inaccurate: bool,
+#[derive(Debug, Deserialize)]
+struct CommitInfo {
+    sha: String,
+    commit: CommitDetails,
 }
 
-struct RepoAnalyzer {
+#[derive(Debug, Deserialize)]
+struct CommitDetails {
+    author: AuthorInfo,
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuthorInfo {
+    name: String,
+    date: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct RepoState {
+    last_commit_sha: String,
+    last_check_time: String,
+    line_count: LineStats,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct LineStats {
+    code: u64,
+    comments: u64,
+    blanks: u64,
+    total: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CommitHistory {
+    repositories: HashMap<String, RepoState>,
+}
+
+struct RepoMonitor {
     github_token: String,
     temp_dir: PathBuf,
     client: reqwest::blocking::Client,
+    history: CommitHistory,
+    force_check: bool,
+    repos_with_changes: Vec<String>,
+    total_new_commits: usize,
 }
 
-impl RepoAnalyzer {
+impl RepoMonitor {
     fn new(github_token: String) -> Result<Self, Box<dyn std::error::Error>> {
         let temp_dir = PathBuf::from("temp");
         fs::create_dir_all(&temp_dir)?;
 
         let client = reqwest::blocking::Client::builder()
-            .user_agent("rust-tokei-counter/1.0")
+            .user_agent("rust-tokei-monitor/1.0")
             .timeout(std::time::Duration::from_secs(300))
             .build()?;
+
+        // Load existing history from artifact if it exists
+        let history = if PathBuf::from("commit_history.json").exists() {
+            let data = fs::read_to_string("commit_history.json")?;
+            serde_json::from_str(&data).unwrap_or_else(|_| CommitHistory {
+                repositories: HashMap::new(),
+            })
+        } else {
+            CommitHistory {
+                repositories: HashMap::new(),
+            }
+        };
+
+        let force_check = std::env::var("FORCE_CHECK")
+            .unwrap_or_default()
+            .to_lowercase() == "true";
 
         Ok(Self {
             github_token,
             temp_dir,
             client,
+            history,
+            force_check,
+            repos_with_changes: Vec::new(),
+            total_new_commits: 0,
         })
+    }
+
+    fn print_header(&self) {
+        println!("┌────────────────────────────────────────────────────────┐");
+        println!("│           LIVE REPOSITORY COMMIT MONITOR               │");
+        println!("├────────────────────────────────────────────────────────┤");
+        println!("│ Time: {}                │", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+        println!("│ Mode: {}                                    │",
+            if self.force_check { "FORCE CHECK" } else { "INCREMENTAL" });
+        println!("└────────────────────────────────────────────────────────┘");
+        println!();
+    }
+
+    fn get_latest_commit(&self, repo: &str) -> Result<CommitInfo, Box<dyn std::error::Error>> {
+        let url = format!("https://api.github.com/repos/{}/commits?per_page=1", repo);
+
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.github_token))
+            .header("Accept", "application/vnd.github.v3+json")
+            .send()?;
+
+        if !response.status().is_success() {
+            return Err(format!("Failed to fetch commits: {}", response.status()).into());
+        }
+
+        let commits: Vec<CommitInfo> = response.json()?;
+        commits.into_iter().next()
+            .ok_or("No commits found".into())
     }
 
     fn get_default_branch(&self, repo: &str) -> Result<String, Box<dyn std::error::Error>> {
         let url = format!("https://api.github.com/repos/{}", repo);
-
-        println!("🔍 Fetching repo info...");
 
         let response = self.client
             .get(&url)
@@ -69,8 +148,6 @@ impl RepoAnalyzer {
 
         fs::create_dir_all(&repo_path)?;
 
-        println!("⬇️  Downloading repository...");
-
         let response = self.client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.github_token))
@@ -82,10 +159,7 @@ impl RepoAnalyzer {
         }
 
         let bytes = response.bytes()?;
-        println!("   Downloaded {} MB", bytes.len() / 1_000_000);
         fs::write(&tarball_path, bytes)?;
-
-        println!("📂 Extracting files...");
 
         let status = Command::new("tar")
             .args(&[
@@ -102,13 +176,10 @@ impl RepoAnalyzer {
         }
 
         fs::remove_file(tarball_path)?;
-
         Ok(repo_path)
     }
 
-    fn get_tokei_stats(&self, path: &PathBuf) -> Result<(u64, u64, u64, u64), Box<dyn std::error::Error>> {
-        println!("🔢 Counting lines...");
-
+    fn count_lines(&self, path: &PathBuf) -> Result<LineStats, Box<dyn std::error::Error>> {
         let output = Command::new("tokei")
             .arg(path)
             .arg("--output")
@@ -122,67 +193,143 @@ impl RepoAnalyzer {
         let json_str = String::from_utf8(output.stdout)?;
         let json: Value = serde_json::from_str(&json_str)?;
 
-        // Extract Total stats
         let total = json.get("Total")
             .ok_or("No Total field in tokei output")?;
 
-        let code = total.get("code")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let code = total.get("code").and_then(|v| v.as_u64()).unwrap_or(0);
+        let comments = total.get("comments").and_then(|v| v.as_u64()).unwrap_or(0);
+        let blanks = total.get("blanks").and_then(|v| v.as_u64()).unwrap_or(0);
+        let total_lines = code + comments + blanks;
 
-        let comments = total.get("comments")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-
-        let blanks = total.get("blanks")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-
-        let lines = code + comments + blanks;
-
-        Ok((code, comments, blanks, lines))
+        Ok(LineStats {
+            code,
+            comments,
+            blanks,
+            total: total_lines,
+        })
     }
 
-    fn print_tokei_output(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        let output = Command::new("tokei")
-            .arg(path)
-            .output()?;
+    fn format_number(n: u64) -> String {
+        n.to_string()
+            .as_bytes()
+            .rchunks(3)
+            .rev()
+            .map(std::str::from_utf8)
+            .collect::<Result<Vec<&str>, _>>()
+            .unwrap()
+            .join(",")
+    }
 
-        if !output.status.success() {
-            return Err("Failed to run tokei".into());
+    fn monitor_repo(&mut self, repo: &str) -> Result<(), Box<dyn std::error::Error>> {
+        println!("╔════════════════════════════════════════════════════════╗");
+        println!("║ 📦 Repository: {:<42} ║", repo);
+        println!("╚════════════════════════════════════════════════════════╝");
+
+        let latest_commit = self.get_latest_commit(repo)?;
+        let last_state = self.history.repositories.get(repo);
+
+        // Check if there are new commits
+        let has_new_commits = last_state
+            .map(|state| state.last_commit_sha != latest_commit.sha)
+            .unwrap_or(true);
+
+        if !has_new_commits && !self.force_check {
+            println!("✅ No new commits since last check");
+            if let Some(state) = last_state {
+                println!("   📍 Last commit: {}", &state.last_commit_sha[..7]);
+                println!("   📊 Code lines: {}", Self::format_number(state.line_count.code));
+                println!("   🕐 Last checked: {}", state.last_check_time);
+            }
+            println!();
+            return Ok(());
         }
 
-        println!("{}", String::from_utf8_lossy(&output.stdout));
+        if has_new_commits {
+            println!("🆕 NEW COMMIT DETECTED!");
+            println!("├─ SHA:     {}", &latest_commit.sha[..10]);
+            println!("├─ Author:  {}", latest_commit.commit.author.name);
+            println!("├─ Date:    {}", latest_commit.commit.author.date);
+            println!("└─ Message: {}", latest_commit.commit.message.lines().next().unwrap_or(""));
+            println!();
+
+            self.repos_with_changes.push(repo.to_string());
+            self.total_new_commits += 1;
+        } else {
+            println!("🔄 Force check enabled - analyzing anyway");
+            println!();
+        }
+
+        println!("⬇️  Downloading repository...");
+        let branch = self.get_default_branch(repo)?;
+        let repo_path = self.download_repo(repo, &branch)?;
+
+        println!("🔢 Counting lines with tokei...");
+        let stats = self.count_lines(&repo_path)?;
+
+        println!();
+        println!("┌─────────────── CURRENT STATISTICS ───────────────┐");
+        println!("│ Code:     {:>12} lines                      │", Self::format_number(stats.code));
+        println!("│ Comments: {:>12} lines                      │", Self::format_number(stats.comments));
+        println!("│ Blanks:   {:>12} lines                      │", Self::format_number(stats.blanks));
+        println!("│ ─────────────────────────────────────────────── │");
+        println!("│ TOTAL:    {:>12} lines                      │", Self::format_number(stats.total));
+        println!("└───────────────────────────────────────────────────┘");
+
+        // Show change if we have previous data
+        if let Some(old_state) = last_state {
+            let code_diff = stats.code as i64 - old_state.line_count.code as i64;
+            let total_diff = stats.total as i64 - old_state.line_count.total as i64;
+
+            println!();
+            println!("┌──────────────── CHANGES ─────────────────────────┐");
+            println!("│ Code lines:  {:>12} ({:>+10})            │",
+                Self::format_number(stats.code),
+                if code_diff >= 0 { format!("+{}", code_diff) } else { code_diff.to_string() });
+            println!("│ Total lines: {:>12} ({:>+10})            │",
+                Self::format_number(stats.total),
+                if total_diff >= 0 { format!("+{}", total_diff) } else { total_diff.to_string() });
+            println!("└───────────────────────────────────────────────────┘");
+        }
+
+        // Update history
+        self.history.repositories.insert(
+            repo.to_string(),
+            RepoState {
+                last_commit_sha: latest_commit.sha,
+                last_check_time: chrono::Local::now().to_rfc3339(),
+                line_count: stats,
+            },
+        );
+
+        fs::remove_dir_all(repo_path)?;
+        println!();
         Ok(())
     }
 
-    fn analyze_repo(&self, repo: &str) -> Result<(u64, u64, u64, u64), Box<dyn std::error::Error>> {
-        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("📦 Repository: {}", repo);
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    fn print_summary(&self) {
+        println!("╔════════════════════════════════════════════════════════╗");
+        println!("║                    SUMMARY                             ║");
+        println!("╠════════════════════════════════════════════════════════╣");
+        println!("║ Repositories monitored: {:>3}                            ║", self.history.repositories.len());
+        println!("║ New commits found:      {:>3}                            ║", self.total_new_commits);
+        println!("║ Repositories changed:   {:>3}                            ║", self.repos_with_changes.len());
+        println!("╚════════════════════════════════════════════════════════╝");
 
-        let branch = self.get_default_branch(repo)?;
-        println!("Branch: {}", branch);
+        if !self.repos_with_changes.is_empty() {
+            println!();
+            println!("Repositories with new commits:");
+            for repo in &self.repos_with_changes {
+                println!("  ✓ {}", repo);
+            }
+        }
+    }
+
+    fn save_history(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let json = serde_json::to_string_pretty(&self.history)?;
+        fs::write("commit_history.json", json)?;
         println!();
-
-        let repo_path = self.download_repo(repo, &branch)?;
-
-        // Print detailed output
-        self.print_tokei_output(&repo_path)?;
-
-        // Get JSON stats
-        let (code, comments, blanks, lines) = self.get_tokei_stats(&repo_path)?;
-
-        println!("\n📊 Summary:");
-        println!("   Code lines: {}", code);
-        println!("   Comments: {}", comments);
-        println!("   Blanks: {}", blanks);
-        println!("   Total lines: {}", lines);
-
-        // Cleanup
-        fs::remove_dir_all(repo_path)?;
-
-        Ok((code, comments, blanks, lines))
+        println!("💾 State saved for next run");
+        Ok(())
     }
 
     fn cleanup(&self) {
@@ -191,56 +338,34 @@ impl RepoAnalyzer {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Get GitHub token from environment
     let github_token = std::env::var("GITHUB_TOKEN")
         .expect("GITHUB_TOKEN environment variable not set");
 
-    // Define repositories to analyze
+    // Repositories to monitor
     let repositories = vec![
         "tokio-rs/tokio",
         "actix/actix-web",
         "serde-rs/serde",
     ];
 
-    let analyzer = RepoAnalyzer::new(github_token)?;
-
-    println!("======================================");
-    println!("LINE COUNT REPORT");
-    println!("Generated: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-    println!("======================================");
-
-    let mut total_code = 0u64;
-    let mut total_comments = 0u64;
-    let mut total_blanks = 0u64;
-    let mut total_lines = 0u64;
-    let mut successful_repos = 0;
+    let mut monitor = RepoMonitor::new(github_token)?;
+    monitor.print_header();
 
     for repo in &repositories {
-        match analyzer.analyze_repo(repo) {
-            Ok((code, comments, blanks, lines)) => {
-                total_code += code;
-                total_comments += comments;
-                total_blanks += blanks;
-                total_lines += lines;
-                successful_repos += 1;
-            }
+        match monitor.monitor_repo(repo) {
+            Ok(_) => {}
             Err(e) => {
-                eprintln!("❌ Error analyzing {}: {}", repo, e);
+                eprintln!("❌ Error monitoring {}: {}", repo, e);
+                eprintln!();
             }
         }
     }
 
-    println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("📈 TOTALS");
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("Repositories analyzed: {}", successful_repos);
-    println!("Total lines of code: {}", total_code);
-    println!("Total comments: {}", total_comments);
-    println!("Total blank lines: {}", total_blanks);
-    println!("Total lines: {}", total_lines);
-    println!("======================================");
+    monitor.print_summary();
+    monitor.save_history()?;
+    monitor.cleanup();
 
-    analyzer.cleanup();
-
+    println!();
+    println!("✅ Monitoring cycle complete!");
     Ok(())
 }
