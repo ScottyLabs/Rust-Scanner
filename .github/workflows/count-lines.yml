@@ -1,14 +1,20 @@
-name: Count Lines with Rust
+name: Monitor Repository Line Changes
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main, master]
+    inputs:
+      force_check:
+        description: 'Force check all repositories'
+        required: false
+        default: 'false'
+  repository_dispatch:
+    types: [external_commit]
   schedule:
-    - cron: '0 0 * * 0'
+    # Check every 5 minutes for new commits
+    - cron: '*/5 * * * *'
 
 jobs:
-  count-lines:
+  monitor-repos:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -43,43 +49,127 @@ jobs:
       - name: Build Rust application
         run: cargo build --release --verbose
 
-      - name: Run line counter
+      - name: Load previous state from artifacts
+        uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          name: commit-history
+          workflow: count-lines.yml
+          if_no_artifact_found: ignore
+
+      - name: Check for new commits and count lines
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_CHECK: ${{ github.event.inputs.force_check }}
         run: |
+          echo "╔════════════════════════════════════════════════════════╗"
+          echo "║        REPOSITORY COMMIT MONITOR - LIVE OUTPUT         ║"
+          echo "╚════════════════════════════════════════════════════════╝"
+          echo ""
           ./target/release/tokei-counter 2>&1 | tee output.log
-        continue-on-error: true
 
-      - name: Check if output exists
-        run: |
-          if [ -f output.log ]; then
-            echo "Output log created successfully"
-            cat output.log
-          else
-            echo "No output log found"
-          fi
-
-      - name: Upload output log
+      - name: Save state for next run
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: line-count-report
-          path: output.log
+          name: commit-history
+          path: commit_history.json
+          retention-days: 90
           if-no-files-found: warn
 
-      - name: Create summary
+      - name: Upload detailed report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: line-count-report-${{ github.run_number }}
+          path: output.log
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Create detailed summary
         if: always()
         run: |
-          echo "# 📊 Line Count Report" >> $GITHUB_STEP_SUMMARY
+          echo "# 📡 Repository Monitor - Live Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Generated:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**🕐 Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**🔢 Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**⚡ Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
           if [ -f output.log ]; then
+            echo "## 📊 Monitor Output" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -30 output.log >> $GITHUB_STEP_SUMMARY
+            cat output.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+
+            # Extract summary stats if available
+            if grep -q "SUMMARY" output.log; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## 📈 Quick Stats" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+
+              repos_checked=$(grep -c "📦 Repository:" output.log || echo "0")
+              new_commits=$(grep -c "🆕 New commit detected" output.log || echo "0")
+              no_changes=$(grep -c "✅ No new commits" output.log || echo "0")
+
+              echo "| Repositories Checked | $repos_checked |" >> $GITHUB_STEP_SUMMARY
+              echo "| New Commits Found | $new_commits |" >> $GITHUB_STEP_SUMMARY
+              echo "| No Changes | $no_changes |" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "⚠️ No output generated" >> $GITHUB_STEP_SUMMARY
           fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "*Analysis completed using Rust + tokei*" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*Next check in 5 minutes or on external trigger*" >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Webhook listener job for instant triggers
+  setup-webhooks:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Instructions for instant monitoring
+        run: |
+          echo "╔════════════════════════════════════════════════════════╗"
+          echo "║          INSTANT COMMIT MONITORING SETUP               ║"
+          echo "╚════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "To enable instant triggers when commits are pushed:"
+          echo ""
+          echo "1. In each monitored repository, go to:"
+          echo "   Settings → Webhooks → Add webhook"
+          echo ""
+          echo "2. Set Payload URL to:"
+          echo "   https://api.github.com/repos/${{ github.repository }}/dispatches"
+          echo ""
+          echo "3. Content type: application/json"
+          echo ""
+          echo "4. Secret: (create a secret token)"
+          echo ""
+          echo "5. Select 'Just the push event'"
+          echo ""
+          echo "6. Or use GitHub Actions in those repos:"
+          echo ""
+          cat << 'EOF'
+          name: Trigger Monitor
+          on:
+            push:
+              branches: [main, master]
+          jobs:
+            notify:
+              runs-on: ubuntu-latest
+              steps:
+                - name: Trigger external monitor
+                  run: |
+                    curl -X POST \
+                      -H "Accept: application/vnd.github.v3+json" \
+                      -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+                      https://api.github.com/repos/${{ github.repository }}/dispatches \
+                      -d '{"event_type":"external_commit"}'
+          EOF
+          echo ""
+          echo "Note: You'll need a PAT with 'repo' scope stored as PAT_TOKEN"
