@@ -232,10 +232,15 @@ impl RepoMonitor {
             .join(",")
     }
 
+    fn format_signed_number(n: i64) -> String {
+        let sign = if n >= 0 { "+" } else { "" };
+        format!("{}{}", sign, Self::format_number(n.abs() as u64))
+    }
+
     fn monitor_repo(&mut self, repo: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("╔════════════════════════════════════════════════════════╗");
+        println!("╔══════════════════════════════════════════════════════╗");
         println!("║ 📦 Repository: {:<42} ║", repo);
-        println!("╚════════════════════════════════════════════════════════╝");
+        println!("╚══════════════════════════════════════════════════════╝");
 
         let latest_commit = self.get_latest_commit(repo)?;
         let last_state = self.history.repositories.get(repo);
@@ -248,9 +253,15 @@ impl RepoMonitor {
         if !has_new_commits && !self.force_check {
             println!("✅ No new commits since last check");
             if let Some(state) = last_state {
-                println!("   📍 Last commit: {}", &state.last_commit_sha[..7]);
+                println!("   📝 Last commit: {}", &state.last_commit_sha[..7]);
                 println!("   📊 Code lines: {}", Self::format_number(state.line_count.code));
+                if state.line_count.rust_code > 0 {
+                    println!("   🦀 Rust lines: {}", Self::format_number(state.line_count.rust_code));
+                }
                 println!("   🕐 Last checked: {}", state.last_check_time);
+
+                // Add to cumulative total even if not checking
+                self.total_rust_lines += state.line_count.rust_code;
             }
             println!();
             return Ok(());
@@ -278,50 +289,48 @@ impl RepoMonitor {
         println!("🔢 Counting lines with tokei...");
         let stats = self.count_lines(&repo_path)?;
 
-        // Add to global Rust line totals
+        // Calculate delta if old state exists
+        let rust_diff = if let Some(old_state) = last_state {
+            stats.rust_code as i64 - old_state.line_count.rust_code as i64
+        } else {
+            stats.rust_code as i64
+        };
+
+        // Update cumulative totals
+        self.rust_lines_delta += rust_diff;
         self.total_rust_lines += stats.rust_code;
 
-        // Track delta if old state exists
-        if let Some(old_state) = last_state {
-            let rust_diff = stats.rust_code as i64 - old_state.line_count.rust_code as i64;
-            self.rust_lines_delta += rust_diff;
-        } else {
-            self.rust_lines_delta += stats.rust_code as i64;
-        }
-
         println!();
-        println!("┌─────────────── CURRENT STATISTICS ───────────────┐");
+        println!("┌─────────────── CURRENT STATISTICS ──────────────────┐");
         println!("│ Code:     {:>12} lines                      │", Self::format_number(stats.code));
         println!("│ Comments: {:>12} lines                      │", Self::format_number(stats.comments));
         println!("│ Blanks:   {:>12} lines                      │", Self::format_number(stats.blanks));
-        println!("│ ─────────────────────────────────────────────── │");
+        println!("│ ───────────────────────────────────────────────────── │");
         println!("│ TOTAL:    {:>12} lines                      │", Self::format_number(stats.total));
-        println!(
-            "║ Rust Lines Found:   {:>10}                               ║",
-            Self::format_number(self.total_rust_lines)
-        );
-        println!("└───────────────────────────────────────────────────┘");
+        if stats.rust_code > 0 {
+            println!("│ 🦀 Rust:  {:>12} lines                      │", Self::format_number(stats.rust_code));
+        }
+        println!("└──────────────────────────────────────────────────────┘");
 
         // Show change if we have previous data
         if let Some(old_state) = last_state {
             let code_diff = stats.code as i64 - old_state.line_count.code as i64;
             let total_diff = stats.total as i64 - old_state.line_count.total as i64;
-            let rust_diff = stats.rust_code as i64 - old_state.line_count.rust_code as i64;
 
             println!();
-            println!("┌──────────────── CHANGES ─────────────────────────┐");
-            println!("│ Code lines:  {:>12} ({:>+10})            │",
+            println!("┌──────────────── CHANGES ─────────────────────────────┐");
+            println!("│ Code lines:  {:>12} ({:>+13})            │",
                 Self::format_number(stats.code),
-                if code_diff >= 0 { format!("+{}", code_diff) } else { code_diff.to_string() });
-            println!("│ Total lines: {:>12} ({:>+10})            │",
+                Self::format_signed_number(code_diff));
+            println!("│ Total lines: {:>12} ({:>+13})            │",
                 Self::format_number(stats.total),
-                if total_diff >= 0 { format!("+{}", total_diff) } else { total_diff.to_string() });
+                Self::format_signed_number(total_diff));
             if stats.rust_code > 0 || old_state.line_count.rust_code > 0 {
-                println!("│ Rust lines:  {:>12} ({:>+10})            │",
+                println!("│ Rust lines:  {:>12} ({:>+13})            │",
                     Self::format_number(stats.rust_code),
-                    if rust_diff >= 0 { format!("+{}", rust_diff) } else { rust_diff.to_string() });
+                    Self::format_signed_number(rust_diff));
             }
-            println!("└───────────────────────────────────────────────────┘");
+            println!("└──────────────────────────────────────────────────────┘");
         }
 
         // Update history
@@ -340,17 +349,20 @@ impl RepoMonitor {
     }
 
     fn print_summary(&self) {
-        println!("╔════════════════════════════════════════════════════════╗");
-        println!("║                    SUMMARY                             ║");
-        println!("╠════════════════════════════════════════════════════════╣");
-        println!("║ Repositories monitored: {:>3}                            ║", self.history.repositories.len());
-        println!("║ New commits found:      {:>3}                            ║", self.total_new_commits);
-        println!("║ Repositories changed:   {:>3}                            ║", self.repos_with_changes.len());
-        println!(
-            "║ Rust Lines Found:   {:>10}                               ║",
-            self.total_rust_lines
-        );
-        println!("╚════════════════════════════════════════════════════════╝");
+        println!("╔══════════════════════════════════════════════════════╗");
+        println!("║                    SUMMARY                           ║");
+        println!("╠══════════════════════════════════════════════════════╣");
+        println!("║ Repositories monitored: {:>3}                          ║", self.history.repositories.len());
+        println!("║ New commits found:      {:>3}                          ║", self.total_new_commits);
+        println!("║ Repositories changed:   {:>3}                          ║", self.repos_with_changes.len());
+        println!("║ ──────────────────────────────────────────────────── ║");
+        println!("║ 🦀 Total Rust Lines:    {:>12}                  ║",
+            Self::format_number(self.total_rust_lines));
+        if self.rust_lines_delta != 0 {
+            println!("║ 🦀 Rust Lines Change:   {:>+13}                 ║",
+                Self::format_signed_number(self.rust_lines_delta));
+        }
+        println!("╚══════════════════════════════════════════════════════╝");
 
         if !self.repos_with_changes.is_empty() {
             println!();
