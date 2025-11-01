@@ -278,6 +278,17 @@ impl RepoMonitor {
         println!("🔢 Counting lines with tokei...");
         let stats = self.count_lines(&repo_path)?;
 
+        // Add to global Rust line totals
+        self.total_rust_lines += stats.rust_code;
+
+        // Track delta if old state exists
+        if let Some(old_state) = last_state {
+            let rust_diff = stats.rust_code as i64 - old_state.line_count.rust_code as i64;
+            self.rust_lines_delta += rust_diff;
+        } else {
+            self.rust_lines_delta += stats.rust_code as i64;
+        }
+
         println!();
         println!("┌─────────────── CURRENT STATISTICS ───────────────┐");
         println!("│ Code:     {:>12} lines                      │", Self::format_number(stats.code));
@@ -285,20 +296,10 @@ impl RepoMonitor {
         println!("│ Blanks:   {:>12} lines                      │", Self::format_number(stats.blanks));
         println!("│ ─────────────────────────────────────────────── │");
         println!("│ TOTAL:    {:>12} lines                      │", Self::format_number(stats.total));
-        if stats.rust_code > 0 {
-            self.total_rust_lines += stats.rust_code;
-            // Add to global Rust line totals
-            self.total_rust_lines += stats.rust_code;
-
-            // Track delta if old state exists
-            if let Some(old_state) = last_state {
-                let rust_diff = stats.rust_code as i64 - old_state.line_count.rust_code as i64;
-                self.rust_lines_delta += rust_diff;
-            } else {
-                self.rust_lines_delta += stats.rust_code as i64;
-            }
-            println!("│ Rust:     {:>12} lines                      │", Self::format_number(stats.rust_code));
-        }
+        println!(
+            "║ Rust Lines Found:   {:>10}                               ║",
+            Self::format_number(self.total_rust_lines)
+        );
         println!("└───────────────────────────────────────────────────┘");
 
         // Show change if we have previous data
@@ -345,9 +346,10 @@ impl RepoMonitor {
         println!("║ Repositories monitored: {:>3}                            ║", self.history.repositories.len());
         println!("║ New commits found:      {:>3}                            ║", self.total_new_commits);
         println!("║ Repositories changed:   {:>3}                            ║", self.repos_with_changes.len());
-        println!("║ Rust Lines Found:   {:>12} ({:>+10})                ║",
-            Self::format_number(self.total_rust_lines),
-            self.rust_lines_delta);
+        println!(
+            "║ Rust Lines Found:   {:>10}                               ║",
+            self.total_rust_lines
+        );
         println!("╚════════════════════════════════════════════════════════╝");
 
         if !self.repos_with_changes.is_empty() {
