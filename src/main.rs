@@ -41,6 +41,7 @@ struct LineStats {
     comments: u64,
     blanks: u64,
     total: u64,
+    rust_code: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -201,11 +202,18 @@ impl RepoMonitor {
         let blanks = total.get("blanks").and_then(|v| v.as_u64()).unwrap_or(0);
         let total_lines = code + comments + blanks;
 
+        // Extract Rust-specific code lines
+        let rust_code = json.get("Rust")
+            .and_then(|rust| rust.get("code"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
         Ok(LineStats {
             code,
             comments,
             blanks,
             total: total_lines,
+            rust_code,
         })
     }
 
@@ -273,12 +281,16 @@ impl RepoMonitor {
         println!("│ Blanks:   {:>12} lines                      │", Self::format_number(stats.blanks));
         println!("│ ─────────────────────────────────────────────── │");
         println!("│ TOTAL:    {:>12} lines                      │", Self::format_number(stats.total));
+        if stats.rust_code > 0 {
+            println!("│ Rust:     {:>12} lines                      │", Self::format_number(stats.rust_code));
+        }
         println!("└───────────────────────────────────────────────────┘");
 
         // Show change if we have previous data
         if let Some(old_state) = last_state {
             let code_diff = stats.code as i64 - old_state.line_count.code as i64;
             let total_diff = stats.total as i64 - old_state.line_count.total as i64;
+            let rust_diff = stats.rust_code as i64 - old_state.line_count.rust_code as i64;
 
             println!();
             println!("┌──────────────── CHANGES ─────────────────────────┐");
@@ -288,6 +300,11 @@ impl RepoMonitor {
             println!("│ Total lines: {:>12} ({:>+10})            │",
                 Self::format_number(stats.total),
                 if total_diff >= 0 { format!("+{}", total_diff) } else { total_diff.to_string() });
+            if stats.rust_code > 0 || old_state.line_count.rust_code > 0 {
+                println!("│ Rust lines:  {:>12} ({:>+10})            │",
+                    Self::format_number(stats.rust_code),
+                    if rust_diff >= 0 { format!("+{}", rust_diff) } else { rust_diff.to_string() });
+            }
             println!("└───────────────────────────────────────────────────┘");
         }
 
