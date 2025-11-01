@@ -3,7 +3,7 @@ name: Count Lines with Rust
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, master]
   schedule:
     - cron: '0 0 * * 0'
 
@@ -15,20 +15,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install tokei
-        run: |
-          wget https://github.com/XAMPPRocky/tokei/releases/latest/download/tokei-x86_64-unknown-linux-gnu.tar.gz
-          tar -xzf tokei-x86_64-unknown-linux-gnu.tar.gz
-          sudo mv tokei /usr/local/bin/
-          tokei --version
-
-      - name: Cache cargo dependencies
+      - name: Cache cargo registry and build
         uses: actions/cache@v3
         with:
           path: |
@@ -37,22 +26,60 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install tokei
+        run: |
+          if ! command -v tokei &> /dev/null; then
+            echo "Installing tokei..."
+            cargo install tokei --locked
+          else
+            echo "tokei already installed"
+          fi
+          tokei --version
 
       - name: Build Rust application
-        run: cargo build --release
+        run: cargo build --release --verbose
 
       - name: Run line counter
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ./target/release/tokei-counter
+          ./target/release/tokei-counter 2>&1 | tee output.log
+        continue-on-error: true
 
-      - name: Generate summary
+      - name: Check if output exists
+        run: |
+          if [ -f output.log ]; then
+            echo "Output log created successfully"
+            cat output.log
+          else
+            echo "No output log found"
+          fi
+
+      - name: Upload output log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: line-count-report
+          path: output.log
+          if-no-files-found: warn
+
+      - name: Create summary
         if: always()
         run: |
           echo "# 📊 Line Count Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Generated:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f output.log ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -30 output.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No output generated" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "*Analysis completed using Rust + tokei*" >> $GITHUB_STEP_SUMMARY

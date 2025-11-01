@@ -181,8 +181,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Define repositories to analyze
     let repositories = vec![
         "rust-lang/rust",
-        "tokio-rs/tokio",
-        "actix/actix-web",
     ];
 
     let analyzer = RepoAnalyzer::new(github_token);
