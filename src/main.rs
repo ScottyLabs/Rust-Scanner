@@ -59,10 +59,11 @@ struct RepoMonitor {
     total_new_commits: usize,
     total_rust_lines: u64,
     rust_lines_delta: i64,
+    exclude_list: Vec<String>,
 }
 
 impl RepoMonitor {
-    fn new(github_token: String) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new(github_token: String, exclude_list: Vec<String>) -> Result<Self, Box<dyn std::error::Error>> {
         let temp_dir = PathBuf::from("temp");
         fs::create_dir_all(&temp_dir)?;
 
@@ -97,7 +98,12 @@ impl RepoMonitor {
             total_new_commits: 0,
             total_rust_lines: 0,
             rust_lines_delta: 0,
+            exclude_list,
         })
+    }
+
+    fn is_excluded(&self, repo: &str) -> bool {
+        self.exclude_list.iter().any(|excluded| repo == excluded)
     }
 
     fn print_header(&self) {
@@ -390,6 +396,92 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let github_token = std::env::var("GITHUB_TOKEN")
         .expect("GITHUB_TOKEN environment variable not set");
 
+    let exclude_list = vec![
+        "ScottyLabs/printscottylabs-website",
+        "ScottyLabs/cmupy",
+        "ScottyLabs/cmurb",
+        "ScottyLabs/wdw",
+        "ScottyLabs/tartanhacks-old",
+        "ScottyLabs/dining-api",
+        "ScottyLabs/course-api",
+        "ScottyLabs/blog",
+        "ScottyLabs/wdw-htmlcss",
+        "ScottyLabs/IntroToSwift",
+        "ScottyLabs/print-ios",
+        "ScottyLabs/print-android",
+        "ScottyLabs/print",
+        "ScottyLabs/HackerHelp",
+        "ScottyLabs/storage-api",
+        "ScottyLabs/HELPq",
+        "ScottyLabs/pausch-api",
+        "ScottyLabs/EmailAutomation",
+        "ScottyLabs/ScottyLabs-Email-Automation",
+        "ScottyLabs/go",
+        "ScottyLabs/TartanHacksRegistrationv2",
+        "ScottyLabs/api-website",
+        "ScottyLabs/social-action-frontend",
+        "ScottyLabs/social-action-backend",
+        "ScottyLabs/cmu_lost_and_found",
+        "ScottyLabs/shuttle-api",
+        "ScottyLabs/wdw-node",
+        "ScottyLabs/wdw-react",
+        "ScottyLabs/quick-clicks",
+        "ScottyLabs/lost-and-found-v2",
+        "ScottyLabs/tartanhacks-dashboard-api",
+        "ScottyLabs/print-status-map",
+        "ScottyLabs/TH-Bot",
+        "ScottyLabs/pausch-ui-backend",
+        "ScottyLabs/scottypass",
+        "ScottyLabs/plane",
+        "ScottyLabs/auto-onboard",
+        "ScottyLabs/cmueats",
+        "ScottyLabs/cmucourses",
+        "ScottyLabs/passlink-server",
+        "ScottyLabs/passlink",
+        "ScottyLabs/web",
+        "ScottyLabs/moneyprinter",
+        "ScottyLabs/scottylol",
+        "ScottyLabs/lost-and-found",
+        "ScottyLabs/roomies",
+        "ScottyLabs/Go-v2",
+        "ScottyLabs/tartanhack_dashboard_v3",
+        "ScottyLabs/pdf-23",
+        "ScottyLabs/pdf-css",
+        "ScottyLabs/pdf-html",
+        "ScottyLabs/lend-it-test",
+        "ScottyLabs/tartanhacks_dashboard_v4",
+        "ScottyLabs/nova",
+        "ScottyLabs/SuperStarter",
+        "ScottyLabs/nova-sdk-swift",
+        "ScottyLabs/nova-sdk-server",
+        "ScottyLabs/nova-js-sdk",
+        "ScottyLabs/nova-python-sdk",
+        "ScottyLabs/cmucal",
+        "ScottyLabs/cmu-purity-test",
+        "ScottyLabs/.github",
+        "ScottyLabs/akita",
+        "ScottyLabs/shepherd",
+        "ScottyLabs/documentation",
+        "ScottyLabs/python-template",
+        "ScottyLabs/mcp",
+        "ScottyLabs/scottylabs.org",
+        "ScottyLabs/cmumaps-data-acquisitor",
+        "ScottyLabs/mem-cho-cmueats-slack-bot",
+        "ScottyLabs/wiki-redirect",
+        "ScottyLabs/authentik",
+        "ScottyLabs/corgi",
+        "ScottyLabs/applications",
+        "ScottyLabs/courses-frontend",
+        "ScottyLabs/mcp-server",
+        "ScottyLabs/cmugpt-finetuning",
+        "ScottyLabs/dalmatian",
+        "ScottyLabs/nova-demo-app-25",
+        "ScottyLabs/cmugpt-backend",
+        "ScottyLabs/devops-config",
+        "ScottyLabs/doberman",
+        "ScottyLabs/coffee-chats",
+    ];
+
     // Repositories to monitor
     let repositories = vec![
         "ScottyLabs/printscottylabs-website",
@@ -488,10 +580,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "ScottyLabs/coffee-chats",
     ];
 
-    let mut monitor = RepoMonitor::new(github_token)?;
+    let mut monitor = RepoMonitor::new(github_token, exclude_list.iter().map(|s| s.to_string()).collect())?;
     monitor.print_header();
 
     for repo in &repositories {
+        if monitor.is_excluded(repo) {
+            continue;
+        }
+
         match monitor.monitor_repo(repo) {
             Ok(_) => {}
             Err(e) => {
